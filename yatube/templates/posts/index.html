@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% load thumbnail %}
+{% load static %}
+{% load cache %}
+{% cache 20 index_page with page_obj %}
+{% block title %}
+  Последние обновления на сайте
+{% endblock %}
+    
+{% block header %}     
+  Последние обновления на сайте
+{% endblock %}
+
+{% block content %}
+  {% include 'posts/includes/switcher.html' %}
+  {% for post in page_obj %}
+    {% include 'includes/card.html' %}
+  {% endfor %}
+  {% include 'posts/includes/paginator.html' %}
+{% endblock %} 
+{% endcache %}
+       

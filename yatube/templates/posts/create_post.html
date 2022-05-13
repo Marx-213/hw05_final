@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}
+  {{ title }}
+{% endblock %}
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-md-8 p-5">
+      <div class="card">
+        <div class="card-header">
+          {{ title }}
+        </div>
+        <div class="card-body">
+          {% if form.errors %}
+              {% for field in form %}
+                {% for error in field.errors %}            
+                  <div class="alert alert-danger">
+                    {{ error|escape }}
+                  </div>
+                {% endfor %}
+              {% endfor %}
+              {% for error in form.non_field_errors %}
+                <div class="alert alert-danger">
+                  {{ error|escape }}
+                </div>
+              {% endfor %}
+          {% endif %}
+
+          <form method="post" enctype="multipart/form-data"
+            {% if action_url %}
+              action="{% url action_url %}"
+            {% endif %}
+          >
+          {% csrf_token %} 
+
+          {% for field in form %}
+            <div class="form-group row my-3"
+              {% if field.field.required %} 
+                aria-required="true"
+              {% else %}
+                aria-required="false"
+              {% endif %}
+            >
+              <label for="{{ field.id_for_label }}">
+                {{ field.label }} поста
+                  {% if field.field.required %}
+                    <span class="required text-danger">*</span>
+                    <textarea name="text" cols="40" rows="10" class="form-control" required id="id_text"></textarea> 
+                    <select name="group" class="form-control" id="id_group">
+                      <option>
+                        {% for group in form.group %}
+                          {{ group }}
+                        {% endfor %}
+                      </option>
+                    </select>
+                    <div class="form-group row my-3 p-3">
+                      <label for="id_image">
+                        Картинка                      
+                      </label>
+                      <input type="file" name="image" accept="image/*" class="form-control" id="id_image">                    
+                    </div>
+                  {% endif %}
+              </label>
+            </div>
+          {% endfor %}
+          <div class="col-md-6 offset-md-4">
+            <button type="submit" class="btn btn-primary">
+              {% if post.instance.pk %}
+                Сохранить
+              {% else %}
+                Добавить
+              {% endif %} 
+            </button>
+          </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
