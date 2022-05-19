@@ -132,7 +132,6 @@ class PostPagesTests(TestCase):
                 self.assertEqual(
                     response.context['post'].text, self.post.text)
 
-
     def test_caches(self):
         """Проверка кеширования на странице index """
         response = self.client.get(reverse('posts:index'))
@@ -142,7 +141,6 @@ class PostPagesTests(TestCase):
         cache.clear()
         self.assertContains(response, self.post_2.text)
         self.assertContains(response, self.post_2.author)
-
 
     def test_follows_show_correct_context(self):
         """Авторизованный пользователь может подписываться
@@ -172,8 +170,12 @@ class PostPagesTests(TestCase):
             response.context['page_obj'][0].text,
             self.post.text
         )
-        self.assertEqual(response.context['page_obj'][0].author, self.post.author)
-        self.assertEqual(response.context['page_obj'][0].text, self.post.text)
+        self.assertEqual(
+            response.context['page_obj'][0].author, self.post.author
+        )
+        self.assertEqual(
+            response.context['page_obj'][0].text, self.post.text
+        )
         response = self.authorized_client_2.get(reverse('posts:follow_index'))
         self.assertNotContains(response, self.post.text)
         self.assertNotContains(response, self.post.author)

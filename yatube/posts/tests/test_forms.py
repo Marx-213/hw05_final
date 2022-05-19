@@ -60,13 +60,13 @@ class PostCreateFormTests(TestCase):
     def test_create_form_with_image(self):
         """Форма с картинкой создает запись в Post."""
         posts_count = Post.objects.count()
-        small_gif = (            
-             b'\x47\x49\x46\x38\x39\x61\x02\x00'
-             b'\x01\x00\x80\x00\x00\x00\x00\x00'
-             b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
-             b'\x00\x00\x00\x2C\x00\x00\x00\x00'
-             b'\x02\x00\x01\x00\x00\x02\x02\x0C'
-             b'\x0A\x00\x3B'
+        small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x02\x00'
+            b'\x01\x00\x80\x00\x00\x00\x00\x00'
+            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+            b'\x0A\x00\x3B'
         )
         uploaded = SimpleUploadedFile(
             name='small.gif',
@@ -169,7 +169,6 @@ class PostCreateFormTests(TestCase):
                 group=self.group.id
             ).exists()
         )
-    
 
     def test_create_comment(self):
         """Проверка создания комментария."""
@@ -193,7 +192,8 @@ class PostCreateFormTests(TestCase):
         )
 
     def test_comments_guest_redirect(self):
-        """Гость не может комментировать посты и перенаправляется на страницу логина."""
+        """Гость не может комментировать посты
+        и перенаправляется на страницу логина."""
         comment_count = Comment.objects.count()
         response = self.guest_client.post(
             reverse(
@@ -202,7 +202,10 @@ class PostCreateFormTests(TestCase):
             data=self.comment_form_data,
             follow=True
         )
-        self.assertRedirects(response, f'/auth/login/?next=/posts/{self.post.id}/comment/')
+        self.assertRedirects(
+            response,
+            f'/auth/login/?next=/posts/{self.post.id}/comment/'
+        )
         self.assertEqual(Comment.objects.count(), comment_count)
         self.assertTrue(
             Comment.objects.filter(
@@ -210,7 +213,7 @@ class PostCreateFormTests(TestCase):
                 author=self.user,
             ).exists()
         )
-    
+
     def test_comment_in_post_detail(self):
         """Комментарий появляется на странице поста."""
         response = self.authorized_client.post(
@@ -224,5 +227,3 @@ class PostCreateFormTests(TestCase):
             response.context['comments'][0].text,
             self.comment.text
         )
-
-
