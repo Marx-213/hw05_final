@@ -4,7 +4,7 @@ from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from ..models import Comment, Follow, Group, Post
+from ..models import Follow, Group, Post
 
 User = get_user_model()
 
@@ -17,9 +17,9 @@ class PostPagesTests(TestCase):
         cls.authorized_client = Client()
         cls.author_client = Client()
         cls.authorized_client_2 = Client()
-        cls.user = User.objects.create_user(username='HasNoName')
+        cls.user = User.objects.create_user(username='NoName1')
         cls.authorized_client.force_login(cls.user)
-        cls.user_2 = User.objects.create_user(username='NoName')
+        cls.user_2 = User.objects.create_user(username='NoName2')
         cls.authorized_client_2.force_login(cls.user_2)
         cls.group = Group.objects.create(
             title='Тестовая группа',
@@ -33,17 +33,16 @@ class PostPagesTests(TestCase):
         )
         cls.post_2 = Post.objects.create(
             author=cls.user,
-            text='Тестовый пост',
-            image='posts/image.png'
-        )
-        cls.comment = Comment.objects.create(
-            author=cls.user,
-            text='Тестовый коммент',
+            text='Тестовый пост'
         )
         cls.follows = Follow.objects.create(
             user=cls.user,
-            author=cls.user_2
+            author=cls.post.author
         )
+        cls.unfollows = Follow.objects.create(
+            user=cls.user,
+            author=cls.post.author
+        ).delete()
         cls.author_client.force_login(cls.post.author)
         cls.templates_pages_names = {
             reverse('posts:index'): 'posts/index.html',
@@ -133,76 +132,66 @@ class PostPagesTests(TestCase):
                 self.assertEqual(
                     response.context['post'].text, self.post.text)
 
-    def test_create_comments(self):
-        """Проверка создания комментария и добавление его на страницу поста.
-        Комментировать посты может только авторизованный пользователь
-        """
-        comment_count = Comment.objects.count()
-        form_data = {
-            'text': f'{self.comment.text}',
-        }
-        response = self.authorized_client.post(
-            reverse(
-                'posts:add_comment',
-                kwargs={'post_id': f'{self.post.id}'}),
-            data=form_data,
-            follow=True
-        )
-        self.assertRedirects(response, reverse(
-            'posts:post_detail',
-            kwargs={'post_id': f'{self.post.id}'}))
-        self.assertEqual(Comment.objects.count(), comment_count + 1)
-        self.assertTrue(
-            Comment.objects.filter(
-                text=self.comment.text,
-                author=self.user,
-            ).exists()
-        )
 
     def test_caches(self):
         """Проверка кеширования на странице index """
         response = self.client.get(reverse('posts:index'))
-        self.assertIsNotNone(response.content)
+        self.assertContains(response, self.post_2.text)
+        self.assertContains(response, self.post_2.author)
         self.post_2.delete()
         cache.clear()
-        self.assertIsNotNone(response.content)
+        self.assertContains(response, self.post_2.text)
+        self.assertContains(response, self.post_2.author)
 
-    def test_create_post(self):
+
+    def test_follows_show_correct_context(self):
         """Авторизованный пользователь может подписываться
         на других пользователей и удалять их из подписок.
+        Новая запись пользователя появляется в ленте тех,
+        кто на него подписан и не появляется в ленте тех, кто не подписан.
         """
-        follow_count = Follow.objects.count()
+        follows_count = Follow.objects.count()
         response = self.authorized_client.get(reverse(
             'posts:profile_follow',
-            kwargs={'username': f'{self.user}'}),
+            kwargs={'username': f'{self.user_2}'}),
             follow=True
         )
         self.assertRedirects(response, reverse(
             'posts:profile',
-            kwargs={'username': f'{self.user}'})
+            kwargs={'username': f'{self.user_2}'})
         )
-        self.assertEqual(Follow.objects.count(), follow_count)
+        self.assertEqual(Follow.objects.count(), follows_count + 1)
         self.assertTrue(
             Follow.objects.filter(
                 user=self.user,
                 author=self.user_2
             ).exists()
         )
-        response = self.authorized_client.post(reverse(
+        response = self.authorized_client.get(reverse('posts:follow_index'))
+        self.assertEqual(
+            response.context['page_obj'][0].text,
+            self.post.text
+        )
+        self.assertEqual(response.context['page_obj'][0].author, self.post.author)
+        self.assertEqual(response.context['page_obj'][0].text, self.post.text)
+        response = self.authorized_client_2.get(reverse('posts:follow_index'))
+        self.assertNotContains(response, self.post.text)
+        self.assertNotContains(response, self.post.author)
+        response = self.authorized_client.get(reverse(
             'posts:profile_unfollow',
-            kwargs={'username': f'{self.follows.user}'}),
+            kwargs={'username': f'{self.user_2}'}),
             follow=True
         )
         self.assertRedirects(response, reverse(
             'posts:profile',
-            kwargs={'username': f'{self.follows.user}'})
+            kwargs={'username': f'{self.user_2}'})
         )
-        self.assertEqual(Follow.objects.count(), follow_count)
-        self.assertTrue(
+        self.assertEqual(Follow.objects.count(), follows_count)
+        self.assertFalse(
             Follow.objects.filter(
                 user=self.user,
                 author=self.user_2
-            ).exists()
+            )
         )
 
 
@@ -210,7 +199,9 @@ class PaginatorViewsTest(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.user = User.objects.create_user(username='NoName')
+        cls.user = User.objects.create_user(username='NoName1')
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(cls.user)
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test_slug',
@@ -242,20 +233,3 @@ class PaginatorViewsTest(TestCase):
             with self.subTest(name=name):
                 response = self.client.get(url + '?page=2')
                 self.assertEqual(len(response.context['page_obj']), 3)
-
-    def test_image_in_pages(self):
-        """Проверка, что изображение передаётся в словаре context
-        на страницы index, group_list, profile, post_detail.
-        """
-        for name, url in self.paginator_context_names.items():
-            with self.subTest(name=name):
-                response = self.client.get(url)
-                self.assertEqual(
-                    response.context['post'].image,
-                    self.posts[0].image
-                )
-        response = self.client.get(f'/posts/{self.posts[0].id}/')
-        self.assertEqual(
-            response.context['post'].image,
-            self.posts[0].image
-        )
