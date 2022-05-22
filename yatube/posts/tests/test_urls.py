@@ -12,27 +12,34 @@ class PostURLTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.guest_client = Client()
-        cls.authorized_client = Client()
-        cls.author_client = Client()
-        cls.user = User.objects.create_user(username='HasNoName')
-        cls.authorized_client.force_login(cls.user)
+        cls.author_user = User.objects.create_user(username='HasNoName')
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test_slug',
             description='Тестовое описание',
         )
         cls.post = Post.objects.create(
-            author=cls.user,
+            author=cls.author_user,
             text='Тестовый пост'
         )
-        cls.author_client.force_login(cls.post.author)
         cls.template_url_names = {
             '/': 'posts/index.html',
-            '/group/test_slug/': 'posts/group_list.html',
-            f'/profile/{cls.user}/': 'posts/profile.html',
+            f'/group/{cls.group.slug}/': 'posts/group_list.html',
+            f'/profile/{cls.author_user}/': 'posts/profile.html',
             f'/posts/{cls.post.id}/': 'posts/post_detail.html',
         }
+        cls.urls = {
+            'create': '/create/',
+            'post_edit': f'/posts/{cls.post.id}/edit/',
+            'unknown_page': '/unknown_page/',
+        }
+
+    def setUp(self):
+        self.guest_client = Client()
+        self.authorized_client = Client()
+        self.author_client = Client()
+        self.authorized_client.force_login(self.author_user)
+        self.author_client.force_login(self.post.author)
 
     def test_posts_available_guest_client(self):
         """Общедоступные страницы доступны любому пользователю"""
@@ -49,38 +56,30 @@ class PostURLTests(TestCase):
                 self.assertTemplateUsed(response, template)
 
     def test_posts_create_url_available_authorized_user(self):
-        """Страница /create/ доступна авторизованному пользователю
-        и использует соответствующий шаблон.
-        """
-        response = self.authorized_client.get('/create/')
-        self.assertEqual(response.status_code, HTTPStatus.OK)
-        self.assertTemplateUsed(response, 'posts/create_post.html')
-
-    def test_posts_edit_url_available_author(self):
-        """Страница /posts/<int:post_id>/edit/ доступна автору."""
-        response = self.author_client.get(f'/posts/{self.post.id}/edit/')
-        self.assertEqual(response.status_code, HTTPStatus.OK)
-
-    def test_posts_create_url_redirect_anonymous_on_login(self):
-        """Страница по адресу /create/ перенаправит анонимного
-        пользователя на страницу логина.
-        """
-        response = self.guest_client.get('/create/', follow=True)
-        self.assertRedirects(
-            response, '/auth/login/?next=/create/'
-        )
-
-    def test_posts_edit_url_redirect_anonymous_on_login(self):
-        """Страница по адресу /posts/<int:post_id>/edit/ перенаправит анонимного
-        пользователя на страницу логина.
-        """
-        response = self.guest_client.get(
-            f'/posts/{self.post.id}/edit/', follow=True)
-        self.assertRedirects(
-            response, f'/auth/login/?next=/posts/{self.post.id}/edit/'
-        )
-
-    def test_404_page(self):
-        """Запрос к несуществующей странице вернёт ошибку 404"""
-        response = self.guest_client.get('/unknown_page/')
-        self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
+        for name, url in self.urls.items():
+            with self.subTest(name=name):
+                if name == 'create':
+                    response = self.authorized_client.get('/create/')
+                    self.assertEqual(response.status_code, HTTPStatus.OK)
+                    self.assertTemplateUsed(response, 'posts/create_post.html')
+                    response = self.guest_client.get('/create/', follow=True)
+                    self.assertRedirects(
+                        response, '/auth/login/?next=/create/'
+                    )
+                elif name == 'post_edit':
+                    response = self.author_client.get(
+                        f'/posts/{self.post.id}/edit/'
+                    )
+                    self.assertEqual(response.status_code, HTTPStatus.OK)
+                    response = self.guest_client.get(
+                        f'/posts/{self.post.id}/edit/', follow=True
+                    )
+                    self.assertRedirects(
+                        response,
+                        f'/auth/login/?next=/posts/{self.post.id}/edit/'
+                    )
+                else:
+                    response = self.guest_client.get('/unknown_page/')
+                    self.assertEqual(
+                        response.status_code, HTTPStatus.NOT_FOUND
+                    )

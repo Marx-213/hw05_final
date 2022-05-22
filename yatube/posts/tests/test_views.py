@@ -4,7 +4,7 @@ from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from ..models import Follow, Group, Post
+from ..models import Follow, Group, Post, Comment
 
 User = get_user_model()
 
@@ -13,37 +13,41 @@ class PostPagesTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.guest_client = Client()
-        cls.authorized_client = Client()
-        cls.author_client = Client()
-        cls.authorized_client_2 = Client()
-        cls.user = User.objects.create_user(username='NoName1')
-        cls.authorized_client.force_login(cls.user)
-        cls.user_2 = User.objects.create_user(username='NoName2')
-        cls.authorized_client_2.force_login(cls.user_2)
+        cls.author_user = User.objects.create_user(username='NoName1')
+        cls.authorized_user = User.objects.create_user(username='NoName2')
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test_slug',
             description='Тестовое описание',
         )
         cls.post = Post.objects.create(
-            author=cls.user,
+            author=cls.author_user,
             text='Тестовый пост',
             image='posts/image.png'
         )
         cls.post_2 = Post.objects.create(
-            author=cls.user,
+            author=cls.author_user,
             text='Тестовый пост'
         )
         cls.follows = Follow.objects.create(
-            user=cls.user,
+            user=cls.author_user,
             author=cls.post.author
         )
-        cls.unfollows = Follow.objects.create(
-            user=cls.user,
-            author=cls.post.author
-        ).delete()
-        cls.author_client.force_login(cls.post.author)
+        # cls.unfollows = Follow.objects.create(
+        #     user=cls.author_user,
+        #     author=cls.post.author
+        # ).delete()
+        cls.form_data = {
+            'text': f'{cls.post.text}',
+            'group': f'{cls.group.id}',
+        }
+        cls.comment = Comment.objects.create(
+            author=cls.author_user,
+            text='Тестовый коммент',
+        )
+        cls.comment_form_data = {
+            'text': f'{cls.comment.text}',
+        }
         cls.templates_pages_names = {
             reverse('posts:index'): 'posts/index.html',
             reverse(
@@ -70,6 +74,15 @@ class PostPagesTests(TestCase):
                 'posts:profile',
                 kwargs={'username': f'{cls.post.author}'})
         }
+
+    def setUp(self):
+        self.guest_client = Client()
+        self.authorized_client = Client()
+        self.author_client = Client()
+        self.authorized_client_2 = Client()
+        self.authorized_client.force_login(self.author_user)
+        self.authorized_client_2.force_login(self.authorized_user)
+        self.author_client.force_login(self.author_user)
 
     def test_pages_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
@@ -142,29 +155,48 @@ class PostPagesTests(TestCase):
         self.assertContains(response, self.post_2.text)
         self.assertContains(response, self.post_2.author)
 
-    def test_follows_show_correct_context(self):
+    def test_follow_and_unfollow(self):
         """Авторизованный пользователь может подписываться
         на других пользователей и удалять их из подписок.
-        Новая запись пользователя появляется в ленте тех,
-        кто на него подписан и не появляется в ленте тех, кто не подписан.
         """
         follows_count = Follow.objects.count()
         response = self.authorized_client.get(reverse(
             'posts:profile_follow',
-            kwargs={'username': f'{self.user_2}'}),
+            kwargs={'username': f'{self.authorized_user}'}),
             follow=True
         )
         self.assertRedirects(response, reverse(
             'posts:profile',
-            kwargs={'username': f'{self.user_2}'})
+            kwargs={'username': f'{self.authorized_user}'})
         )
         self.assertEqual(Follow.objects.count(), follows_count + 1)
         self.assertTrue(
             Follow.objects.filter(
-                user=self.user,
-                author=self.user_2
+                user=self.author_user,
+                author=self.authorized_user
             ).exists()
         )
+        response = self.authorized_client.get(reverse(
+            'posts:profile_unfollow',
+            kwargs={'username': f'{self.authorized_user}'}),
+            follow=True
+        )
+        self.assertRedirects(response, reverse(
+            'posts:profile',
+            kwargs={'username': f'{self.authorized_user}'})
+        )
+        self.assertEqual(Follow.objects.count(), follows_count)
+        self.assertFalse(
+            Follow.objects.filter(
+                user=self.author_user,
+                author=self.authorized_user
+            )
+        )
+
+    def test_follow_index_show_correct_context(self):
+        '''Новая запись пользователя появляется в ленте тех,
+        кто на него подписан и не появляется в ленте тех, кто не подписан.
+        '''
         response = self.authorized_client.get(reverse('posts:follow_index'))
         self.assertEqual(
             response.context['page_obj'][0].text,
@@ -179,21 +211,86 @@ class PostPagesTests(TestCase):
         response = self.authorized_client_2.get(reverse('posts:follow_index'))
         self.assertNotContains(response, self.post.text)
         self.assertNotContains(response, self.post.author)
-        response = self.authorized_client.get(reverse(
-            'posts:profile_unfollow',
-            kwargs={'username': f'{self.user_2}'}),
+
+    def test_comments_guest_redirect(self):
+        """Гость не может комментировать посты
+        и перенаправляется на страницу логина."""
+        comment_count = Comment.objects.count()
+        response = self.guest_client.post(
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': f'{self.post.id}'}),
+            data=self.comment_form_data,
+            follow=True
+        )
+        self.assertRedirects(
+            response,
+            f'/auth/login/?next=/posts/{self.post.id}/comment/'
+        )
+        self.assertEqual(Comment.objects.count(), comment_count)
+        self.assertTrue(
+            Comment.objects.filter(
+                text=self.comment.text,
+                author=self.author_user,
+            ).exists()
+        )
+
+    def test_guest_can_not_edit_post(self):
+        """Гость не может редактировать посты
+        и перенаправляется на страницу логина"""
+        response = self.guest_client.post(
+            reverse('posts:post_edit', kwargs={'post_id': f'{self.post.id}'}),
+            data=self.form_data,
+            follow=True
+        )
+        self.assertRedirects(
+            response, f'/auth/login/?next=/posts/{self.post.id}/edit/'
+        )
+
+    def test_users_can_not_edit_post(self):
+        """Пользователи не могут изменять чужие посты."""
+        response = self.authorized_client_2.post(
+            reverse('posts:post_edit', kwargs={'post_id': f'{self.post.id}'}),
+            data=self.form_data,
+            follow=True
+        )
+        self.assertRedirects(
+            response, f'/profile/{self.author_user}/'
+        )
+
+    def test_guest_can_not_create_post(self):
+        """Гость не может создавать посты
+        и перенаправляется на страницу логина"""
+        posts_count = Post.objects.count()
+        response = self.guest_client.post(
+            reverse('posts:post_create'),
+            data=self.form_data,
+            follow=True
+        )
+        self.assertRedirects(
+            response, '/auth/login/?next=/create/'
+        )
+        self.assertEqual(Post.objects.count(), posts_count)
+
+    def test_create_post(self):
+        """Валидная форма создает запись в Post."""
+        posts_count = Post.objects.count()
+        response = self.authorized_client.post(
+            reverse('posts:post_create'),
+            data=self.form_data,
             follow=True
         )
         self.assertRedirects(response, reverse(
             'posts:profile',
-            kwargs={'username': f'{self.user_2}'})
+            kwargs={'username': f'{self.author_user}'})
         )
-        self.assertEqual(Follow.objects.count(), follows_count)
-        self.assertFalse(
-            Follow.objects.filter(
-                user=self.user,
-                author=self.user_2
-            )
+        self.assertEqual(Post.objects.count(), posts_count + 1)
+        self.assertTrue(
+            Post.objects.filter(
+                text=self.post.text,
+                author=self.author_user,
+                group=self.group.id
+            ).exists()
         )
 
 

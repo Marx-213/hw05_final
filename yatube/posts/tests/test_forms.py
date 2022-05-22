@@ -9,7 +9,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from ..forms import PostForm
-from ..models import Comment, Group, Post, User
+from ..models import Comment, Group, Post
 
 User = get_user_model()
 
@@ -23,12 +23,8 @@ class PostCreateFormTests(TestCase):
         super().setUpClass()
         cls.guest_client = Client()
         cls.authorized_client = Client()
-        cls.authorized_client_2 = Client()
         cls.author_client = Client()
-        cls.user = User.objects.create_user(username='NoName')
-        cls.user_2 = User.objects.create_user(username='NoName_2')
-        cls.authorized_client.force_login(cls.user)
-        cls.authorized_client_2.force_login(cls.user_2)
+        cls.user = User.objects.create_user(username='NoName1')
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test_slug',
@@ -43,7 +39,6 @@ class PostCreateFormTests(TestCase):
             'text': f'{cls.post.text}',
             'group': f'{cls.group.id}',
         }
-        cls.author_client.force_login(cls.post.author)
         cls.comment = Comment.objects.create(
             author=cls.user,
             text='Тестовый коммент',
@@ -51,6 +46,10 @@ class PostCreateFormTests(TestCase):
         cls.comment_form_data = {
             'text': f'{cls.comment.text}',
         }
+
+    def setUp(cls):
+        cls.authorized_client.force_login(cls.user)
+        cls.author_client.force_login(cls.post.author)
 
     @classmethod
     def tearDownClass(cls):
@@ -94,64 +93,6 @@ class PostCreateFormTests(TestCase):
             ).exists()
         )
 
-    def test_guest_can_not_create_post(self):
-        """Гость не может создавать посты
-        и перенаправляется на страницу логина"""
-        posts_count = Post.objects.count()
-        response = self.guest_client.post(
-            reverse('posts:post_create'),
-            data=self.form_data,
-            follow=True
-        )
-        self.assertRedirects(
-            response, '/auth/login/?next=/create/'
-        )
-        self.assertEqual(Post.objects.count(), posts_count)
-
-    def test_guest_can_not_edit_post(self):
-        """Гость не может редактировать посты
-        и перенаправляется на страницу логина"""
-        response = self.guest_client.post(
-            reverse('posts:post_edit', kwargs={'post_id': f'{self.post.id}'}),
-            data=self.form_data,
-            follow=True
-        )
-        self.assertRedirects(
-            response, f'/auth/login/?next=/posts/{self.post.id}/edit/'
-        )
-
-    def test_users_can_not_edit_post(self):
-        """Пользователи не могут изменять чужие посты."""
-        response = self.authorized_client_2.post(
-            reverse('posts:post_edit', kwargs={'post_id': f'{self.post.id}'}),
-            data=self.form_data,
-            follow=True
-        )
-        self.assertRedirects(
-            response, f'/profile/{self.user}/'
-        )
-
-    def test_create_post(self):
-        """Валидная форма создает запись в Post."""
-        posts_count = Post.objects.count()
-        response = self.authorized_client.post(
-            reverse('posts:post_create'),
-            data=self.form_data,
-            follow=True
-        )
-        self.assertRedirects(response, reverse(
-            'posts:profile',
-            kwargs={'username': f'{self.user}'})
-        )
-        self.assertEqual(Post.objects.count(), posts_count + 1)
-        self.assertTrue(
-            Post.objects.filter(
-                text=self.post.text,
-                author=self.user,
-                group=self.group.id
-            ).exists()
-        )
-
     def test_edit_post(self):
         """Проверка редактирования поста."""
         posts_count = Post.objects.count()
@@ -184,29 +125,6 @@ class PostCreateFormTests(TestCase):
             'posts:post_detail',
             kwargs={'post_id': f'{self.post.id}'}))
         self.assertEqual(Comment.objects.count(), comment_count + 1)
-        self.assertTrue(
-            Comment.objects.filter(
-                text=self.comment.text,
-                author=self.user,
-            ).exists()
-        )
-
-    def test_comments_guest_redirect(self):
-        """Гость не может комментировать посты
-        и перенаправляется на страницу логина."""
-        comment_count = Comment.objects.count()
-        response = self.guest_client.post(
-            reverse(
-                'posts:add_comment',
-                kwargs={'post_id': f'{self.post.id}'}),
-            data=self.comment_form_data,
-            follow=True
-        )
-        self.assertRedirects(
-            response,
-            f'/auth/login/?next=/posts/{self.post.id}/comment/'
-        )
-        self.assertEqual(Comment.objects.count(), comment_count)
         self.assertTrue(
             Comment.objects.filter(
                 text=self.comment.text,

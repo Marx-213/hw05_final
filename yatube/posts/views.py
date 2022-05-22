@@ -11,7 +11,7 @@ User = get_user_model()
 
 
 def paginator(request, post_list):
-    post = Paginator(post_list, settings.POST_PAGE_COUNT)
+    post = Paginator(post_list, settings.POST_AMOUNT)
     page_number = request.GET.get('page')
     page_obj = post.get_page(page_number)
     return page_obj
@@ -63,17 +63,12 @@ def post_detail(request, post_id):
 
 @login_required
 def post_create(request):
-    title = 'Добавить запись'
     form = PostForm(
         request.POST or None,
         files=request.FILES or None,
     )
     if not form.is_valid():
-        context = {
-            'title': title,
-            'form': form
-        }
-        return render(request, 'posts/create_post.html', context)
+        return render(request, 'posts/create_post.html', {'form': form})
     post = form.save(commit=False)
     post.author = request.user
     post.save()
@@ -90,13 +85,11 @@ def post_edit(request, post_id):
         files=request.FILES or None,
         instance=post
     )
-    title = 'Редактировать запись'
     if not form.is_valid():
-        context = {
-            'form': form,
-            'title': title
-        }
-        return render(request, 'posts/create_post.html', context)
+        return render(
+            request, 'posts/create_post.html',
+            {'form': form, 'editing': True}
+        )
     form.save()
     return redirect('posts:post_detail', post.pk)
 
@@ -110,16 +103,19 @@ def add_comment(request, post_id):
         comment.author = request.user
         comment.post = post
         comment.save()
-        return redirect('posts:post_detail', post_id=post_id)
+    return redirect('posts:post_detail', post_id=post_id)
 
 
 @login_required
 def follow_index(request):
-    post_list = Post.objects.filter(author__following__user=request.user)
-    context = {
-        'page_obj': paginator(request, post_list),
-    }
-    return render(request, 'posts/follow.html', context)
+    post_list = (
+        Post.objects.filter(author__following__user=request.user)
+        .select_related('author', 'group')
+    )
+    return render(
+        request, 'posts/follow.html',
+        {'page_obj': paginator(request, post_list)}
+    )
 
 
 @login_required
@@ -127,7 +123,6 @@ def profile_follow(request, username):
     author = User.objects.get(username=username)
     if author != request.user:
         Follow.objects.get_or_create(user=request.user, author=author)
-        return redirect('posts:profile', username=username)
     return redirect('posts:profile', username=username)
 
 
@@ -139,5 +134,4 @@ def profile_unfollow(request, username):
             user=request.user,
             author__username=username
         ).delete()
-        return redirect('posts:profile', username=username)
     return redirect('posts:profile', username=username)
