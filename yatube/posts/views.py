@@ -51,8 +51,8 @@ def profile(request, username):
 
 def post_detail(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
-    form = CommentForm(request.POST or None)
-    comments = post.comments.select_related('post')
+    form = CommentForm()
+    comments = post.comments.select_related('author')
     context = {
         'post': post,
         'form': form,
@@ -87,7 +87,8 @@ def post_edit(request, post_id):
     )
     if not form.is_valid():
         return render(
-            request, 'posts/create_post.html',
+            request,
+            'posts/create_post.html',
             {'form': form, 'editing': True}
         )
     form.save()
@@ -128,10 +129,8 @@ def profile_follow(request, username):
 
 @login_required
 def profile_unfollow(request, username):
-    author = get_object_or_404(User, username=username)
-    if request.user != author:
-        Follow.objects.get(
-            user=request.user,
-            author__username=username
-        ).delete()
+    Follow.objects.get(
+        user=request.user,
+        author__username=username
+    ).delete()
     return redirect('posts:profile', username=username)

@@ -18,7 +18,7 @@ class PostURLTests(TestCase):
             slug='test_slug',
             description='Тестовое описание',
         )
-        cls.post = Post.objects.create(
+        cls.text_post = Post.objects.create(
             author=cls.author_user,
             text='Тестовый пост'
         )
@@ -26,12 +26,11 @@ class PostURLTests(TestCase):
             '/': 'posts/index.html',
             f'/group/{cls.group.slug}/': 'posts/group_list.html',
             f'/profile/{cls.author_user}/': 'posts/profile.html',
-            f'/posts/{cls.post.id}/': 'posts/post_detail.html',
+            f'/posts/{cls.text_post.id}/': 'posts/post_detail.html',
         }
         cls.urls = {
             'create': '/create/',
-            'post_edit': f'/posts/{cls.post.id}/edit/',
-            'unknown_page': '/unknown_page/',
+            'post_edit': f'/posts/{cls.text_post.id}/edit/',
         }
 
     def setUp(self):
@@ -39,7 +38,7 @@ class PostURLTests(TestCase):
         self.authorized_client = Client()
         self.author_client = Client()
         self.authorized_client.force_login(self.author_user)
-        self.author_client.force_login(self.post.author)
+        self.author_client.force_login(self.text_post.author)
 
     def test_posts_available_guest_client(self):
         """Общедоступные страницы доступны любому пользователю"""
@@ -55,31 +54,12 @@ class PostURLTests(TestCase):
                 response = self.authorized_client.get(address)
                 self.assertTemplateUsed(response, template)
 
-    def test_posts_create_url_available_authorized_user(self):
+    def test_create_post_edit_available_authorized_user(self):
+        """Страницы create и post_edit доступны авторизованным пользователям.
+        Запрос к несуществующей странице вернет 404"""
         for name, url in self.urls.items():
             with self.subTest(name=name):
-                if name == 'create':
-                    response = self.authorized_client.get('/create/')
-                    self.assertEqual(response.status_code, HTTPStatus.OK)
-                    self.assertTemplateUsed(response, 'posts/create_post.html')
-                    response = self.guest_client.get('/create/', follow=True)
-                    self.assertRedirects(
-                        response, '/auth/login/?next=/create/'
-                    )
-                elif name == 'post_edit':
-                    response = self.author_client.get(
-                        f'/posts/{self.post.id}/edit/'
-                    )
-                    self.assertEqual(response.status_code, HTTPStatus.OK)
-                    response = self.guest_client.get(
-                        f'/posts/{self.post.id}/edit/', follow=True
-                    )
-                    self.assertRedirects(
-                        response,
-                        f'/auth/login/?next=/posts/{self.post.id}/edit/'
-                    )
-                else:
-                    response = self.guest_client.get('/unknown_page/')
-                    self.assertEqual(
-                        response.status_code, HTTPStatus.NOT_FOUND
-                    )
+                response = self.authorized_client.get(url)
+                self.assertEqual(response.status_code, HTTPStatus.OK)
+            response = self.authorized_client.get('/unknown_page/')
+            self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)

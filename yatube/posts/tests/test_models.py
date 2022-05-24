@@ -16,14 +16,14 @@ class PostModelTest(TestCase):
             slug='test_slug',
             description='Тестовое описание',
         )
-        cls.post = Post.objects.create(
+        cls.text_post = Post.objects.create(
             author=cls.user,
             text='Тестовый пост и пост',
         )
 
     def test_models_have_correct_object_names(self):
         """Проверяем, что у модели Post корректно работает __str__."""
-        post = self.post
+        post = self.text_post
         expected_object_name = post.text[:15]
         self.assertEqual(expected_object_name, str(post))
 
@@ -48,7 +48,7 @@ class PostModelTest(TestCase):
 
     def test_help_text(self):
         """help_text в полях совпадает с ожидаемым."""
-        post = self.post
+        post = self.text_post
         field_help_texts = {
             'text': 'Введите текст поста',
             'group': 'Группа, к которой будет относиться пост',

@@ -21,26 +21,23 @@ class PostCreateFormTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.guest_client = Client()
-        cls.authorized_client = Client()
-        cls.author_client = Client()
-        cls.user = User.objects.create_user(username='NoName1')
+        cls.author_user = User.objects.create_user(username='NoName1')
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test_slug',
             description='Тестовое описание',
         )
         cls.form = PostForm()
-        cls.post = Post.objects.create(
-            author=cls.user,
+        cls.text_post = Post.objects.create(
+            author=cls.author_user,
             text='Тестовый пост',
         )
         cls.form_data = {
-            'text': f'{cls.post.text}',
+            'text': f'{cls.text_post.text}',
             'group': f'{cls.group.id}',
         }
         cls.comment = Comment.objects.create(
-            author=cls.user,
+            author=cls.author_user,
             text='Тестовый коммент',
         )
         cls.comment_form_data = {
@@ -48,8 +45,11 @@ class PostCreateFormTests(TestCase):
         }
 
     def setUp(cls):
-        cls.authorized_client.force_login(cls.user)
-        cls.author_client.force_login(cls.post.author)
+        cls.guest_client = Client()
+        cls.authorized_client = Client()
+        cls.author_client = Client()
+        cls.authorized_client.force_login(cls.author_user)
+        cls.author_client.force_login(cls.text_post.author)
 
     @classmethod
     def tearDownClass(cls):
@@ -73,7 +73,7 @@ class PostCreateFormTests(TestCase):
             content_type='image/gif'
         )
         form_data = {
-            'text': f'{self.post.text}',
+            'text': f'{self.text_post.text}',
             'group': f'{self.group.id}',
             'image': uploaded,
         }
@@ -82,12 +82,12 @@ class PostCreateFormTests(TestCase):
             data=form_data,
             follow=True
         )
-        self.assertRedirects(response, f'/profile/{self.user}/')
+        self.assertRedirects(response, f'/profile/{self.author_user}/')
         self.assertEqual(Post.objects.count(), posts_count + 1)
         self.assertTrue(
             Post.objects.filter(
-                author=self.user,
-                text=self.post.text,
+                author=self.author_user,
+                text=self.text_post.text,
                 group=self.group.id,
                 image='posts/small.gif'
             ).exists()
@@ -97,7 +97,7 @@ class PostCreateFormTests(TestCase):
         """Проверка редактирования поста."""
         posts_count = Post.objects.count()
         response = self.author_client.post(
-            reverse('posts:post_edit', kwargs={'post_id': f'{self.post.id}'}),
+            reverse('posts:post_edit', kwargs={'post_id': self.text_post.id}),
             data=self.form_data,
             follow=True
         )
@@ -105,8 +105,8 @@ class PostCreateFormTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.OK)
         self.assertTrue(
             Post.objects.filter(
-                text=self.post.text,
-                author=self.user,
+                text=self.text_post.text,
+                author=self.author_user,
                 group=self.group.id
             ).exists()
         )
@@ -117,18 +117,18 @@ class PostCreateFormTests(TestCase):
         response = self.authorized_client.post(
             reverse(
                 'posts:add_comment',
-                kwargs={'post_id': f'{self.post.id}'}),
+                kwargs={'post_id': f'{self.text_post.id}'}),
             data=self.comment_form_data,
             follow=True
         )
         self.assertRedirects(response, reverse(
             'posts:post_detail',
-            kwargs={'post_id': f'{self.post.id}'}))
+            kwargs={'post_id': f'{self.text_post.id}'}))
         self.assertEqual(Comment.objects.count(), comment_count + 1)
         self.assertTrue(
             Comment.objects.filter(
                 text=self.comment.text,
-                author=self.user,
+                author=self.author_user,
             ).exists()
         )
 
@@ -137,7 +137,7 @@ class PostCreateFormTests(TestCase):
         response = self.authorized_client.post(
             reverse(
                 'posts:add_comment',
-                kwargs={'post_id': f'{self.post.id}'}),
+                kwargs={'post_id': f'{self.text_post.id}'}),
             data=self.comment_form_data,
             follow=True
         )
