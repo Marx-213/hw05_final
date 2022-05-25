@@ -131,17 +131,3 @@ class PostCreateFormTests(TestCase):
                 author=self.author_user,
             ).exists()
         )
-
-    def test_comment_in_post_detail(self):
-        """Комментарий появляется на странице поста."""
-        response = self.authorized_client.post(
-            reverse(
-                'posts:add_comment',
-                kwargs={'post_id': f'{self.text_post.id}'}),
-            data=self.comment_form_data,
-            follow=True
-        )
-        self.assertEqual(
-            response.context['comments'][0].text,
-            self.comment.text
-        )
